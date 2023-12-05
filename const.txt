@@ -1,0 +1,34 @@
+1.让指针指向一个常量对象：
+    int age = 23;
+    const int *pt = age;//这里的常量不是实际上的常量，只是对pt而言age是常量
+    此处pt指向一个const int(常量对象),所以不可以使用*pt来修改age的值,但可以修改pt指向的位置
+
+2.将指针本身声明为常量：
+    int age = 23;
+    int *const pt = age;
+    此处pt被声明为const，即指针被声明为常量（指针本身是变量，其存储的值是地址），因次不可以改变指针指向的位置，但是可以通过*pt改变其age的值
+
+    对于一个指针： int *pt;
+    可以说pt是指针，而*pt是int，而不是指针
+
+3.引用与指针类似：
+    例如：
+        int &pt = rat; 等价于： int *const pt = rat;
+
+4.引用经常用作函数参数，如果函数使用引用来传递信息，而不想对这些信息进行修改，则应该使用const引用
+    如：int refcube(const int &ra);//这样可以确保函数不会改变传递给ra的值
+
+5.const成员函数：可以确保调用对象在调用函数时自身不会被修改
+    例如:const Stock land("sxs"); //Stock为一个类，land是该类的一个对象
+        land.show(); //show()函数是Stock类里面的一个成员函数,用来输出显示land的相关数据
+    则show()函数应该被声明为const成员函数：
+        void Stock::show() const; //将const关键字放在函数的括号后面即表明show是const成员函数
+
+6.函数返回值是否要声明为const引用，取决于返回值是否为const引用：
+    const Stock &Stock::topval(const Stock &s) const //这里因为返回*this(指向调用成员函数的对象)或者s的引用，因为*this和s都被声明为const（一个是函数末尾的const，另一个是函数参数里的const），
+    {                                                //所以函数不能对他们进行修改，故返回的引用也必须被声明为const
+        if( value > s.value )
+            return *this;
+        else
+            return s;
+    }
