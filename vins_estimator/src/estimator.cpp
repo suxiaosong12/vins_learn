@@ -80,7 +80,9 @@ void Estimator::clearState()
     drift_correct_r = Matrix3d::Identity();
     drift_correct_t = Vector3d::Zero();
 }
-
+/*
+对imu数据进行处理，包括更新预积分量，和提供优化状态量的初始值
+*/
 void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
 {
     if (!first_imu) // first_imu == false：未获取第一帧IMU数据
@@ -93,6 +95,7 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
 
     // 滑窗中保留11帧，frame_count表示现在处理第几帧，一般处理到第11帧时就保持不变了
     // pre_integrations[frame_count]，它是IntegrationBase的一个实例，它保存着frame_count帧中所有跟IMU预积分相关的量，包括F矩阵，Q矩阵，J矩阵等
+    // 由于预积分是帧间约束，因此第一个预积分量实际上是用不到的
     if (!pre_integrations[frame_count])  // 如果当前IMU帧没有构造IntegrationBase，那就构造一个，后续会用上
     {
         pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
@@ -102,18 +105,15 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
     {
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
         //if(solver_flag != NON_LINEAR)
+            // 这个量用来做初始化用的
             tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
-
         // 保存传感器数据
         dt_buf[frame_count].push_back(dt);
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
 
-        // 用IMU数据进行积分，当积完一个measurement中所有IMU数据后，就得到了对应图像帧在世界坐标系中的Ps、Vs、Rs
-        // 下面这一部分的积分，在没有成功完成初始化时似乎是没有意义的，因为在没有成功初始化时，对IMU数据来说是没有世界坐标系的
-        // 当成功完成了初始化后，下面这一部分积分才有用，它可以通过IMU积分得到滑动窗口中最新帧在世界坐标系中的
-        int j = frame_count;
-        // 下面都采用的是中值积分的传播方式，noise被忽略了  
+        // 中值积分，更新滑窗中状态量，本质是给非线性优化提供可信的初始值
+        int j = frame_count; 
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];
         Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();

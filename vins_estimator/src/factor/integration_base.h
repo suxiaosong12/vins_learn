@@ -52,7 +52,12 @@ class IntegrationBase
             propagate(dt_buf[i], acc_buf[i], gyr_buf[i]);
     }
 
-    // 基于中值法的IMU预积分
+    /*
+        基于中值法的IMU预积分
+        1.根据中值积分更新预积分量delta_p、delta_v、delta_q、linearized_ba、linearized_bg
+        2.计算出离散形式PVQ增量误差公式中的F矩阵和V矩阵
+        3.更新雅可比矩阵和协方差矩阵
+    */
     void midPointIntegration(double _dt,  // 时间间隔
                             const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,  // k时刻加速度，k时刻角速度
                             const Eigen::Vector3d &_acc_1, const Eigen::Vector3d &_gyr_1,  // k + 1时刻加速度，k + 1时刻角速度
@@ -77,7 +82,7 @@ class IntegrationBase
             Vector3d w_x = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;
             Vector3d a_0_x = _acc_0 - linearized_ba;
             Vector3d a_1_x = _acc_1 - linearized_ba;
-            Matrix3d R_w_x, R_a_0_x, R_a_1_x;
+            Matrix3d R_w_x, R_a_0_x, R_a_1_x;  // PVQ 增量公式中的三个反对称矩阵
 
             R_w_x<<0, -w_x(2), w_x(1),
                 w_x(2), 0, -w_x(0),

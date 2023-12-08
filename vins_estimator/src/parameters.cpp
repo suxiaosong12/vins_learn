@@ -2,8 +2,8 @@
 
 double INIT_DEPTH;
 double MIN_PARALLAX;
-double ACC_N, ACC_W;
-double GYR_N, GYR_W;
+double ACC_N, ACC_W;  // 加速度和角速度的标准差
+double GYR_N, GYR_W;  // 加速度和角速度偏移的标准差
 
 std::vector<Eigen::Matrix3d> RIC;  // 即Rbc，旋转外参
 std::vector<Eigen::Vector3d> TIC;
