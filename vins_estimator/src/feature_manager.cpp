@@ -61,6 +61,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
 
     // 把当前帧图像特征点数据image添加到feature容器中
     // feature容器按照特征点id组织特征点数据，对于每个id的特征点，记录它被滑动窗口中哪些图像帧观测到了
+    // 遍历每个特征点
     for (auto &id_pts : image)
     {
         FeaturePerFrame f_per_fra(id_pts.second[0].second, td);  // 用特征点信息构造一个对象
@@ -146,7 +147,7 @@ void FeatureManager::debugShow()
     }
 }
 
-// 获取frame_count和frame_count-1帧的匹配点
+// 得到同时被frame_count_l和frame_count_r帧看到的特征点和各自的坐标
 vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_count_l, int frame_count_r)
 {
     vector<pair<Vector3d, Vector3d>> corres;
@@ -404,7 +405,7 @@ double FeatureManager::compensatedParallax2(const FeaturePerId &it_per_id, int f
     double ans = 0;  // 初始化视差
 
     // 以下的操作暂时没有看懂
-    Vector3d p_j = frame_j.point;
+    Vector3d p_j = frame_j.point;  // 归一化相机坐标
 
     double u_j = p_j(0);
     double v_j = p_j(1);
@@ -426,7 +427,6 @@ double FeatureManager::compensatedParallax2(const FeaturePerId &it_per_id, int f
     double v_i_comp = p_i_comp(1) / dep_i_comp;
     double du_comp = u_i_comp - u_j, dv_comp = v_i_comp - v_j;
 
-    // ？？？？ 开算术平方根还能开出负数吗？？？？ 不用比也是后者大啊？？？？
     ans = max(ans, sqrt(min(du * du + dv * dv, du_comp * du_comp + dv_comp * dv_comp)));
 
     return ans;

@@ -12,8 +12,9 @@ InitialEXRotation::InitialEXRotation(){
 bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> corres, Quaterniond delta_q_imu, Matrix3d &calib_ric_result)
 {
     frame_count++;
-    Rc.push_back(solveRelativeR(corres));  // 通过对极约束计算旋转
-    Rimu.push_back(delta_q_imu.toRotationMatrix());  // 帧间IMU的R，由IMU预积分得到
+    Rc.push_back(solveRelativeR(corres));  // 通过对极约束计算旋转Rckck+1
+    Rimu.push_back(delta_q_imu.toRotationMatrix());  // 帧间IMU的R，由IMU预积分得到Rbkbk+1
+    // 通过外参把IMU的旋转转移到相机坐标系
     Rc_g.push_back(ric.inverse() * delta_q_imu * ric);  // ric是上一次求解得到的外参
 
     Eigen::MatrixXd A(frame_count * 4, 4);
@@ -92,15 +93,23 @@ Matrix3d InitialEXRotation::solveRelativeR(const vector<pair<Vector3d, Vector3d>
         double ratio2 = max(testTriangulation(ll, rr, R2, t1), testTriangulation(ll, rr, R2, t2));
         cv::Mat_<double> ans_R_cv = ratio1 > ratio2 ? R1 : R2;
 
+        // 解出来的是R21
         Matrix3d ans_R_eigen;
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 3; j++)
-                ans_R_eigen(j, i) = ans_R_cv(i, j);
+                ans_R_eigen(j, i) = ans_R_cv(i, j);  // 转换为R12
         return ans_R_eigen;
     }
     return Matrix3d::Identity();
 }
 
+/*
+通过三角化来检查R t是否合理
+l:l相机的观测
+r:r相机的观测
+R：旋转矩阵
+t:位移
+*/
 double InitialEXRotation::testTriangulation(const vector<cv::Point2f> &l,
                                           const vector<cv::Point2f> &r,
                                           cv::Mat_<double> R, cv::Mat_<double> t)
@@ -116,10 +125,12 @@ double InitialEXRotation::testTriangulation(const vector<cv::Point2f> &l,
     int front_count = 0;
     for (int i = 0; i < pointcloud.cols; i++)
     {
+        // 因为是齐次的，所以要求最后一维等于1
         double normal_factor = pointcloud.col(i).at<float>(3);
-
+        // 得到各自相机坐标系下的3d坐标
         cv::Mat_<double> p_3d_l = cv::Mat(P) * (pointcloud.col(i) / normal_factor);
         cv::Mat_<double> p_3d_r = cv::Mat(P1) * (pointcloud.col(i) / normal_factor);
+        // 通过深度是否大于0来判断是否合理
         if (p_3d_l(2) > 0 && p_3d_r(2) > 0)
             front_count++;
     }

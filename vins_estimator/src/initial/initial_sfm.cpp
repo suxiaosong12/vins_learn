@@ -1,4 +1,5 @@
 #include "initial_sfm.h"
+#include <cassert>
 
 GlobalSFM::GlobalSFM(){}
 

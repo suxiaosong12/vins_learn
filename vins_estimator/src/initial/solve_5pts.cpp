@@ -202,7 +202,7 @@ bool MotionEstimator::solveRelativeRT(const vector<pair<Vector3d, Vector3d>> &co
         }
         cv::Mat mask;
         cv::Mat E = cv::findFundamentalMat(ll, rr, cv::FM_RANSAC, 0.3 / 460, 0.99, mask);  // 本质矩阵求解
-        cv::Mat cameraMatrix = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);  // 相机内参
+        cv::Mat cameraMatrix = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);  // 已经是归一化相机坐标系了，因此相机内参矩阵用单位阵
         cv::Mat rot, trans;
         int inlier_cnt = cv::recoverPose(E, ll, rr, cameraMatrix, rot, trans, mask);  // 通过本质矩阵得到R，t
         //cout << "inlier_cnt " << inlier_cnt << endl;
@@ -215,8 +215,8 @@ bool MotionEstimator::solveRelativeRT(const vector<pair<Vector3d, Vector3d>> &co
             for (int j = 0; j < 3; j++)
                 R(i, j) = rot.at<double>(i, j);
         }
-
-        Rotation = R.transpose();  // 取反，表示最新帧到第l帧的旋转平移
+        // opencv得到的是T21，这里换成T12
+        Rotation = R.transpose();
         Translation = -R.transpose() * T;
         if(inlier_cnt > 12)
             return true;

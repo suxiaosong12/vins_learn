@@ -132,11 +132,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
 
-    // 把当前帧图像（frame_count）的特征点添加到f_manager.feature容器中
-    // 计算第2最新帧与第3最新帧之间的平均视差（当前帧是第1最新帧），然后判断是否把第2最新帧添加为关键帧
-    // 在未完成初始化时，如果窗口没有塞满，那么是否添加关键帧的判定结果不起作用，滑动窗口要塞满
-    // 只有在滑动拆个纽扣塞满后，或者初始化完成之后，才需要滑动窗口，此时才需要做关键帧判别，根据第2最新关键帧是否未关键帧选择相应的边缘化策略
-    // VINS滑动窗口采取的是这样的策略，它判断当前帧是不是关键帧，如果是关键帧，滑窗的时候marg掉最老帧；如果不是关键帧，则marg掉上一帧
+    // 把当前帧图像（frame_count）的特征点添加到f_manager.feature容器中，同时进行是否关键帧的检查
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))  // true：上一帧是关键帧，marg_old; false:上一帧不是关键帧marg_second_new
         marginalization_flag = MARGIN_OLD;
     else
@@ -166,6 +162,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         if (frame_count != 0)
         {
             // 调用getCorresponding获取frame_count和frame_count-1帧的匹配点
+            // 这里标定IMU和相机的旋转外参的初值
+            // 因为预积分是相邻帧的约束，因为这里得到的图像关联也是相邻的
             vector<pair<Vector3d, Vector3d>> corres = f_manager.getCorresponding(frame_count - 1, frame_count);
             Matrix3d calib_ric;
             if (initial_ex_rotation.CalibrationExRotation(corres, pre_integrations[frame_count]->delta_q, calib_ric))
