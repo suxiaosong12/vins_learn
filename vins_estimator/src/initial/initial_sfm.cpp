@@ -1,5 +1,5 @@
 #include "initial_sfm.h"
-#include <cassert>
+#include </usr/include/assert.h>
 
 GlobalSFM::GlobalSFM(){}
 
@@ -86,7 +86,7 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
 									 vector<SFMFeature> &sfm_f)
 {
 	assert(frame0 != frame1);
-	for (int j = 0; j < feature_num; j++) // 遍历sfm_f中的特征点
+	for (int j = 0; j < feature_num; j++) // 遍历sfm_f中的特征点,feature_num是特征点总数
 	{
 		if (sfm_f[j].state == true) // 如果该特征点已经被三角化，则跳过
 			continue;
@@ -123,6 +123,7 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
 
 /**
  * 输入参数说明：
+ * 根据已有的枢纽帧和最后一帧的位姿变换，得到各帧位姿和3D点坐标，最后通过ceres进行优化
  * int frame_num： 滑动窗口中图像帧的数量，实际上就是WINDOW_SIZE + 1
  * Quaterniond* q： 一个数组指针，数组中需要存储滑动窗口中所有帧的姿态
  * Vector3d* T： 一个数组指针，数组中需要存储滑动窗口中所有帧的位置
@@ -130,7 +131,7 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
  * const Matrix3d relative_R： 从最新帧到第l帧的旋转
  * const Vector3d relative_T： 从最新帧到第l帧的位移
  * vector<SFMFeature> &sfm_f： 用于视觉初始化的特征点数据
- * map<int, Vector3d> &sfm_tracked_points
+ * map<int, Vector3d> &sfm_tracked_points 恢复出来的地图点
  */
 bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 			  const Matrix3d relative_R, const Vector3d relative_T,
@@ -148,7 +149,6 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	q[l].x() = 0;
 	q[l].y() = 0;
 	q[l].z() = 0;
-
 	// 第l帧位置向量设置为[0, 0, 0],作为参考帧
 	T[l].setZero();
 
@@ -160,9 +160,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	//cout << "init t_l " << T[l].transpose() << endl;
 
 	//rotate to cam frame
-	// 构造容器，存储滑窗内 第l帧 相对于 其它帧 和 最新一帧 的变换矩阵
-	// 这些容器存储的都是相对运动，大写的容器对应的是l帧旋转到各个帧。
-    // 小写的容器是用于全局BA时使用的，也同样是l帧旋转到各个帧。
+	// 由于纯视觉slam处理都是Tcw，因此下面把Twc转换为Tcw
 	Matrix3d c_Rotation[frame_num];
 	Vector3d c_Translation[frame_num];
 	Quaterniond c_Quat[frame_num];
@@ -172,15 +170,12 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 
 	Eigen::Matrix<double, 3, 4> Pose[frame_num]; // 滑动窗口中第l帧相对于第i帧的变换矩阵[R t]
 
-	// 之所以在这两个地方要保存这种相反的旋转，是因为三角化求深度的时候需要这个相反旋转的矩阵
-	// 第l帧
 	// 将枢纽帧和最后一帧Twc转成Tcw，包括四元数，旋转矩阵，平移向量和增广矩阵
 	c_Quat[l] = q[l].inverse(); // 四元数取逆
 	c_Rotation[l] = c_Quat[l].toRotationMatrix();
 	c_Translation[l] = -1 * (c_Rotation[l] * T[l]);
 	Pose[l].block<3, 3>(0, 0) = c_Rotation[l];
 	Pose[l].block<3, 1>(0, 3) = c_Translation[l];
-
 	// 滑动窗口中的最新帧
 	c_Quat[frame_num - 1] = q[frame_num - 1].inverse();
 	c_Rotation[frame_num - 1] = c_Quat[frame_num - 1].toRotationMatrix();
@@ -227,6 +222,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 
 	//3: triangulate l-----l+1 l+2 ... frame_num -2
 	// 遍历（l + 1）帧到第（frame_num - 2）帧，寻找与第l帧的匹配，三角化更多的地图点
+	// 考虑有些特征点不能被最后一帧看到，因此，fix枢纽帧，遍历枢纽帧到最后一帧进行特征点三角化
 	/** 
 	 * 从第l + 1帧到第（frame_num - 2）帧：
 	 * 第i帧（i = l + 1, ..., frame_num - 2）的位姿前面已经计算过了
@@ -268,9 +264,10 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	{
 		if (sfm_f[j].state == true) // 该特征点已经三角化，跳过
 			continue;
-		if ((int)sfm_f[j].observation.size() >= 2)
+		if ((int)sfm_f[j].observation.size() >= 2)  // 只有被两个以上KF帧观测到才可以三角化
 		{
 			Vector2d point0, point1;
+			// 取首尾两个KF，尽量保证两KF之间足够位移
 			int frame_0 = sfm_f[j].observation[0].first;
 			point0 = sfm_f[j].observation[0].second;
 			int frame_1 = sfm_f[j].observation.back().first;

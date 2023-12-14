@@ -314,7 +314,7 @@ bool Estimator::initialStructure()
     } 
 
 
-    Matrix3d relative_R; // 从最新帧到选定帧(第l帧)的旋转
+    Matrix3d relative_R; // 从最新帧到选定帧(第l帧)的旋转 R_l = relative_R * R_最新帧
     Vector3d relative_T; // 从最新帧到选定帧(第l帧)的位移
     int l; // 选定帧在滑动窗口中的帧号
 
@@ -338,7 +338,7 @@ bool Estimator::initialStructure()
     }
 
     // solve pnp for all frame
-
+    // 上面只针对KF进行sfm，初始化需要all_image_frame中的所有元素，因此下面通过KF来求解其他非KF的位姿
     // 4.对于非滑动窗口的所有帧，提供一个初始的R,T，然后solve pnp求解pose
     map<double, ImageFrame>::iterator frame_it;
     map<int, Vector3d>::iterator it;
@@ -360,9 +360,9 @@ bool Estimator::initialStructure()
             i++;
             continue;
         }
-        if((frame_it->first) > Headers[i].stamp.toSec())  // 边界判断：如果当前帧的时间戳大于滑窗内第i帧的时间戳，那么i++
+        if((frame_it->first) > Headers[i].stamp.toSec())  // 边界判断：如果当前帧的时间戳大于滑窗内第i帧的时间戳，那么i++，
         {
-            i++;  // 没看明白
+            i++;  // 第i个关键帧
         }
 
         // 为滑动窗口外的帧提供一个初始位姿,最近的KF提供一个初始值，Twc -> Tcw
