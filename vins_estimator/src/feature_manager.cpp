@@ -25,6 +25,7 @@ void FeatureManager::clearState()
     feature.clear();
 }
 
+// 得到有效的地图点数目
 int FeatureManager::getFeatureCount()
 {
     int cnt = 0;
@@ -200,6 +201,7 @@ void FeatureManager::removeFailures()
     }
 }
 
+// 把给定的深度赋值给各个特征点作为逆深度
 void FeatureManager::clearDepth(const VectorXd &x)
 {
     int feature_index = -1;
@@ -212,6 +214,7 @@ void FeatureManager::clearDepth(const VectorXd &x)
     }
 }
 
+// 得到特征点的逆深度
 VectorXd FeatureManager::getDepthVector()
 {
     VectorXd dep_vec(getFeatureCount());
@@ -230,6 +233,7 @@ VectorXd FeatureManager::getDepthVector()
     return dep_vec;
 }
 
+// 利用观测到该特征点的所有位姿来三角化特征点
 void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
 {
     for (auto &it_per_id : feature) // 对于每个id的特征点
@@ -239,11 +243,10 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
             // 如果该特征点被两帧及两帧以上的图像观测到，
             // 且观测到该特征点的第一帧图像应该早于或等于滑动窗口第4最新关键帧
             // 也就是说，至少是第4最新关键帧和第3最新关键帧观测到了该特征点（第2最新帧似乎是紧耦合优化的最新帧）
-
-            continue; // 跳过
+            continue;
 
         if (it_per_id.estimated_depth > 0) // 该id的特征点深度值大于0，该值在初始化时为-1，如果大于0，说明该点被三角化过
-            continue; // 跳过
+            continue;
 
         // imu_i：观测到该特征点的第一帧图像在滑动窗口中的帧号
         // imu_j：观测到该特征点的最后一帧图像在滑动窗口中的帧号
@@ -253,40 +256,48 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
         Eigen::MatrixXd svd_A(2 * it_per_id.feature_per_frame.size(), 4);
         int svd_idx = 0;
 
-        Eigen::Matrix<double, 3, 4> P0; // 似乎是[R | T]的形式，是一个位姿
+        Eigen::Matrix<double, 3, 4> P0;
+        // Twi -> Twc, 第一个观察到这个特征点的KF的位姿
         Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];
         Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];
-        P0.leftCols<3>() = Eigen::Matrix3d::Identity(); // 单位旋转矩阵
-        P0.rightCols<1>() = Eigen::Vector3d::Zero(); // 0平移向量
+        P0.leftCols<3>() = Eigen::Matrix3d::Identity();
+        P0.rightCols<1>() = Eigen::Vector3d::Zero();
 
-        for (auto &it_per_frame : it_per_id.feature_per_frame) // 对于观测到该id特征点的每一图像帧
+        // 遍历所有观测到这个特征点的KF
+        for (auto &it_per_frame : it_per_id.feature_per_frame)
         {
             imu_j++; // 观测到该特征点的最后一帧图像在滑动窗口中的帧号
-
+            // 得到该KF的相机坐标系位姿
             Eigen::Vector3d t1 = Ps[imu_j] + Rs[imu_j] * tic[0];
             Eigen::Matrix3d R1 = Rs[imu_j] * ric[0];
+            // T_w_cj -> T_c0_cj
+            // 这里是将原本的cj作为世界坐标系改为c0帧作为世界坐标系
             Eigen::Vector3d t = R0.transpose() * (t1 - t0);
             Eigen::Matrix3d R = R0.transpose() * R1;
             Eigen::Matrix<double, 3, 4> P;
+            // T_c0_cj -> T_cj_c0相当于把c0当作世界系
             P.leftCols<3>() = R.transpose();
             P.rightCols<1>() = -R.transpose() * t;
             Eigen::Vector3d f = it_per_frame.point.normalized();
+            // 构建超定方程的其中两个方程
             svd_A.row(svd_idx++) = f[0] * P.row(2) - f[2] * P.row(0);
             svd_A.row(svd_idx++) = f[1] * P.row(2) - f[2] * P.row(1);
 
-            if (imu_i == imu_j) // 在第一次进入for循环的时候，这个条件成立，这时候循环体都执行完了，continue发挥不了什么作用啊？？？
+            if (imu_i == imu_j)
                 continue;
         }
         ROS_ASSERT(svd_idx == svd_A.rows());
         Eigen::Vector4d svd_V = Eigen::JacobiSVD<Eigen::MatrixXd>(svd_A, Eigen::ComputeThinV).matrixV().rightCols<1>();
+        // 求解齐次坐标下的深度
         double svd_method = svd_V[2] / svd_V[3];
         //it_per_id->estimated_depth = -b / A;
         //it_per_id->estimated_depth = svd_V[2] / svd_V[3];
 
-        it_per_id.estimated_depth = svd_method; // 似乎是得到了该特征点的深度
+        // 得到的深度值实际上就是第一个观察到这个特征点的相机坐标系下的深度值
+        it_per_id.estimated_depth = svd_method;
         //it_per_id->estimated_depth = INIT_DEPTH;
 
-        if (it_per_id.estimated_depth < 0.1) // 如果估计出来的深度小于0.1（单位是啥？？？），则把它替换为一个设定的值
+        if (it_per_id.estimated_depth < 0.1) // 如果估计出来的深度小于0.1，则把它替换为一个设定的值
         {
             it_per_id.estimated_depth = INIT_DEPTH;
         }

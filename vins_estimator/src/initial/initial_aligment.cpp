@@ -1,6 +1,7 @@
 #include "initial_alignment.h"
 
 //see V-B-1 in Paper
+//求解陀螺仪零偏，同时利用求出来的零偏重新进行预积分
 //根据视觉SFM的结果来校正陀螺仪的Bias，注意得到了新的Bias后对应的预积分需要repropagate
 //求解IMU偏移思路：IMU预计分增量 = SFM相邻位姿变换
 void solveGyroscopeBias(map<double, ImageFrame> &all_image_frame, Vector3d* Bgs)
@@ -49,8 +50,8 @@ MatrixXd TangentBasis(Vector3d &g0)
     Vector3d tmp(0, 0, 1);
     if(a == tmp)
         tmp << 1, 0, 0;
-    b = (tmp - a * (a.transpose() * tmp)).normalized();
-    c = a.cross(b);
+    b = (tmp - a * (a.transpose() * tmp)).normalized();  //得到一个垂直于a(重力)的矢量b，且模为1
+    c = a.cross(b);  // a叉乘b
     MatrixXd bc(3, 2);
     bc.block<3, 1>(0, 0) = b;
     bc.block<3, 1>(0, 1) = c;
@@ -66,7 +67,7 @@ void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vector
     Vector3d lx, ly;  //论文中w1,w2
     //VectorXd x;
     int all_frame_count = all_image_frame.size();
-    int n_state = all_frame_count * 3 + 2 + 1;
+    int n_state = all_frame_count * 3 + 2 + 1;  // 对比LinearAlignment()函数中的g，由三自由度变为了两自由度
 
     MatrixXd A{n_state, n_state};
     A.setZero();
@@ -135,6 +136,7 @@ void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vector
     g = g0;
 }
 
+//求解各帧的速度，枢纽帧的重力方向，以及尺度
 //初始化滑动窗口中每帧的 速度V[0:n] Gravity Vectorg,尺度s -> 对应论文的V-B-2
 //重力修正RefineGravity -> 对应论文的V-B-3
 //重力方向跟世界坐标的Z轴对齐
@@ -190,6 +192,7 @@ bool LinearAlignment(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vect
         A.block<6, 4>(i * 3, n_state - 4) += r_A.topRightCorner<6, 4>();  // 求解g的矩阵块
         A.block<4, 6>(n_state - 4, i * 3) += r_A.bottomLeftCorner<4, 6>();
     }
+    // 乘1000，增强数值稳定性
     A = A * 1000.0;
     b = b * 1000.0;
     x = A.ldlt().solve(b);  // ldlt分解把x偏大的100矫正

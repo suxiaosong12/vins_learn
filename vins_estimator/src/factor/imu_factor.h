@@ -8,7 +8,12 @@
 #include "integration_base.h"
 
 #include <ceres/ceres.h>
-
+/*
+使用ceres解析求导，必须重载这个函数
+parameters是一个二维数组，每个参数块都是一个double数组，而一个观测会对多个参数块形成约束
+residuals残差的计算结果，是一个一维数组
+jacobians残差对参数块的雅可比矩阵，是一个二维数组，对任意一个参数块的雅可比矩阵都是一个一维数组
+*/
 class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 {
   public:
@@ -18,7 +23,8 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
     }
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
     {
-
+        // 便于后续计算，把参数块都转换成eigen
+        // imu预积分的约束的参数是相邻两帧的位姿 速度 零偏 
         Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
         Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
 
@@ -58,13 +64,16 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 #endif
 
         Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);
+        // 得到残差
         residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,
                                             Pj, Qj, Vj, Baj, Bgj);
-
+        // 置信度直接乘在残差上，这里通过LLT分解，相当于将信息矩阵开根号
         Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();
         //sqrt_info.setIdentity();
+        // 带有信息矩阵的残差
         residual = sqrt_info * residual;
 
+        // 雅可比矩阵的计算
         if (jacobians)
         {
             double sum_dt = pre_integration->sum_dt;

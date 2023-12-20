@@ -108,11 +108,11 @@ class Estimator
     double initial_timestamp; // VINS系统完成初始化操作时对应的图像帧的时间戳（需要注意的是，虽然完成了初始化操作，但是初始化不一定成功）
 
     // 用于ceres优化的参数快
-    double para_Pose[WINDOW_SIZE + 1][SIZE_POSE];
-    double para_SpeedBias[WINDOW_SIZE + 1][SIZE_SPEEDBIAS];
-    double para_Feature[NUM_OF_F][SIZE_FEATURE];
-    double para_Ex_Pose[NUM_OF_CAM][SIZE_POSE];
-    double para_Retrive_Pose[SIZE_POSE];
+    double para_Pose[WINDOW_SIZE + 1][SIZE_POSE];  // 位姿[p,q]
+    double para_SpeedBias[WINDOW_SIZE + 1][SIZE_SPEEDBIAS];  // 速度和零偏v、ba、bg
+    double para_Feature[NUM_OF_F][SIZE_FEATURE];  // 逆深度
+    double para_Ex_Pose[NUM_OF_CAM][SIZE_POSE];  // 外参[Pbc,Qbc]
+    double para_Retrive_Pose[SIZE_POSE];  // 回环
     double para_Td[1][1];
     double para_Tr[1][1];
 

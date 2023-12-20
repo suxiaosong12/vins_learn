@@ -35,19 +35,22 @@ class IntegrationBase
         propagate(dt, acc, gyr);
     }
 
-    // bk到bk+1的PVQ传播矫正和误差传递矫正
+    // 根据新设置的imu零偏重新对该帧进行预积分
     void repropagate(const Eigen::Vector3d &_linearized_ba, const Eigen::Vector3d &_linearized_bg)
     {
+        //状态全部全部清零
         sum_dt = 0.0;
         acc_0 = linearized_acc;
         gyr_0 = linearized_gyr;
         delta_p.setZero();
         delta_q.setIdentity();
         delta_v.setZero();
+        // 附上设置的零偏值
         linearized_ba = _linearized_ba;
         linearized_bg = _linearized_bg;
         jacobian.setIdentity();
         covariance.setZero();
+        // 用之前存下来的imu值重新预积分
         for (int i = 0; i < static_cast<int>(dt_buf.size()); i++)
             propagate(dt_buf[i], acc_buf[i], gyr_buf[i]);
     }
