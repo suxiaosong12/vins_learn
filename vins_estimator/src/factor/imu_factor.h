@@ -8,12 +8,7 @@
 #include "integration_base.h"
 
 #include <ceres/ceres.h>
-/*
-使用ceres解析求导，必须重载这个函数
-parameters是一个二维数组，每个参数块都是一个double数组，而一个观测会对多个参数块形成约束
-residuals残差的计算结果，是一个一维数组
-jacobians残差对参数块的雅可比矩阵，是一个二维数组，对任意一个参数块的雅可比矩阵都是一个一维数组
-*/
+
 class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 {
   public:
@@ -21,6 +16,12 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
     IMUFactor(IntegrationBase* _pre_integration):pre_integration(_pre_integration)
     {
     }
+    /*
+        使用ceres解析求导，必须重载这个函数
+        parameters是一个二维数组，每个参数块都是一个double数组，而一个观测会对多个参数块形成约束
+        residuals残差的计算结果，是一个一维数组
+        jacobians残差对参数块的雅可比矩阵，是一个二维数组，对任意一个参数块的雅可比矩阵都是一个一维数组
+    */
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
     {
         // 便于后续计算，把参数块都转换成eigen

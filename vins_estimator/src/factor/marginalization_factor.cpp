@@ -87,23 +87,26 @@ MarginalizationInfo::~MarginalizationInfo()
     }
 }
 
+// 收集各个残差
 void MarginalizationInfo::addResidualBlockInfo(ResidualBlockInfo *residual_block_info)
 {
-    factors.emplace_back(residual_block_info);
+    factors.emplace_back(residual_block_info);  // 残差块收集起来
 
-    std::vector<double *> &parameter_blocks = residual_block_info->parameter_blocks;
-    std::vector<int> parameter_block_sizes = residual_block_info->cost_function->parameter_block_sizes();
+    std::vector<double *> &parameter_blocks = residual_block_info->parameter_blocks;  // 这是和该约束相关的参数块
+    std::vector<int> parameter_block_sizes = residual_block_info->cost_function->parameter_block_sizes();  // 各个参数块的大小
 
     for (int i = 0; i < static_cast<int>(residual_block_info->parameter_blocks.size()); i++)
     {
         double *addr = parameter_blocks[i];
         int size = parameter_block_sizes[i];
-        parameter_block_size[reinterpret_cast<long>(addr)] = size;
+        // 这里是个unordered map，避免重复添加
+        parameter_block_size[reinterpret_cast<long>(addr)] = size;  // 地址->global size
     }
-
+    // 待边缘化的参数块
     for (int i = 0; i < static_cast<int>(residual_block_info->drop_set.size()); i++)
     {
         double *addr = parameter_blocks[residual_block_info->drop_set[i]];
+        // 先准备好待边缘化的参数块的map
         parameter_block_idx[reinterpret_cast<long>(addr)] = 0;
     }
 }

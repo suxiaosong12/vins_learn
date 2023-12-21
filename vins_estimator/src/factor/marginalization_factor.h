@@ -14,6 +14,7 @@ const int NUM_THREADS = 4;
 
 struct ResidualBlockInfo
 {
+    // 构造函数需要，cost function(约束)，loss function：残差的计算方式，相关联的参数块，待边缘化的参数块的索引
     ResidualBlockInfo(ceres::CostFunction *_cost_function, ceres::LossFunction *_loss_function, std::vector<double *> _parameter_blocks, std::vector<int> _drop_set)
         : cost_function(_cost_function), loss_function(_loss_function), parameter_blocks(_parameter_blocks), drop_set(_drop_set) {}
 
