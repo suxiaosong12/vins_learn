@@ -221,6 +221,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         {
             ROS_WARN("failure detection!");
             failure_occur = 1;
+            // 如果异常，重启VIO
             clearState();
             setParameter();
             ROS_WARN("system reboot!");
@@ -234,6 +235,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         ROS_DEBUG("marginalization costs: %fms", t_margin.toc());
 
         // prepare output of VINS
+        // 给可视化用的
         key_poses.clear();
         for (int i = 0; i <= WINDOW_SIZE; i++)
             key_poses.push_back(Ps[i]);
@@ -742,12 +744,12 @@ void Estimator::double2vector()
 
 bool Estimator::failureDetection()
 {
-    if (f_manager.last_track_num < 2)
+    if (f_manager.last_track_num < 2)  // 地图点数目是否足够
     {
         ROS_INFO(" little feature %d", f_manager.last_track_num);
         //return true;
     }
-    if (Bas[WINDOW_SIZE].norm() > 2.5)
+    if (Bas[WINDOW_SIZE].norm() > 2.5)  // 零偏是否正常
     {
         ROS_INFO(" big IMU acc bias estimation %f", Bas[WINDOW_SIZE].norm());
         return true;
@@ -765,12 +767,12 @@ bool Estimator::failureDetection()
     }
     */
     Vector3d tmp_P = Ps[WINDOW_SIZE];
-    if ((tmp_P - last_P).norm() > 5)
+    if ((tmp_P - last_P).norm() > 5)  // 两帧之间运动是否过大
     {
         ROS_INFO(" big translation");
         return true;
     }
-    if (abs(tmp_P.z() - last_P.z()) > 1)
+    if (abs(tmp_P.z() - last_P.z()) > 1)  //重力方向运动是否过大
     {
         ROS_INFO(" big z translation");
         return true; 
@@ -780,7 +782,7 @@ bool Estimator::failureDetection()
     Quaterniond delta_Q(delta_R);
     double delta_angle;
     delta_angle = acos(delta_Q.w()) * 2.0 / 3.14 * 180.0;
-    if (delta_angle > 50)
+    if (delta_angle > 50)  // 两帧姿态变化是否过大
     {
         ROS_INFO(" big delta_angle ");
         //return true;
@@ -1012,7 +1014,7 @@ void Estimator::optimization()
             }
         }
 
-        // 把这次要marg的视觉信息加进来，遍历视觉重投影的约束
+        // 遍历视觉重投影的约束
         {   // 添加视觉的先验，只添加起始帧是旧帧且观测次数大于2的Features
             int feature_index = -1;
             for (auto &it_per_id : f_manager.feature)
@@ -1088,8 +1090,8 @@ void Estimator::optimization()
 
         if (last_marginalization_info)
             delete last_marginalization_info;
-        last_marginalization_info = marginalization_info;
-        last_marginalization_parameter_blocks = parameter_blocks;
+        last_marginalization_info = marginalization_info;  // 本次边缘化的所有信息
+        last_marginalization_parameter_blocks = parameter_blocks;  // 代表该次边缘化对某系参数块形成约束，这些参数块在滑窗之后的地址
         
     }
 //——————————————————————————————————————————————————————marg_new————————————————————————————————————————————————————————————————————
@@ -1106,11 +1108,14 @@ void Estimator::optimization()
                 vector<int> drop_set;
                 for (int i = 0; i < static_cast<int>(last_marginalization_parameter_blocks.size()); i++)
                 {
+                    // 速度零偏只会margin第1个，不可能出现倒数第2个
                     ROS_ASSERT(last_marginalization_parameter_blocks[i] != para_SpeedBias[WINDOW_SIZE - 1]);
+                    // 这种case只会margin掉倒数第二个位姿
                     if (last_marginalization_parameter_blocks[i] == para_Pose[WINDOW_SIZE - 1])
                         drop_set.push_back(i);
                 }
                 // construct new marginlization_factor
+                // 这里只会更新一下margin factor
                 MarginalizationFactor *marginalization_factor = new MarginalizationFactor(last_marginalization_info);
                 ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(marginalization_factor, NULL,
                                                                                last_marginalization_parameter_blocks,
@@ -1134,12 +1139,12 @@ void Estimator::optimization()
             {
                 if (i == WINDOW_SIZE - 1)
                     continue;
-                else if (i == WINDOW_SIZE)
+                else if (i == WINDOW_SIZE)  // 滑窗，最新帧成为次新帧
                 {
                     addr_shift[reinterpret_cast<long>(para_Pose[i])] = para_Pose[i - 1];
                     addr_shift[reinterpret_cast<long>(para_SpeedBias[i])] = para_SpeedBias[i - 1];
                 }
-                else
+                else  // 其他不变
                 {
                     addr_shift[reinterpret_cast<long>(para_Pose[i])] = para_Pose[i];
                     addr_shift[reinterpret_cast<long>(para_SpeedBias[i])] = para_SpeedBias[i];
@@ -1173,8 +1178,10 @@ void Estimator::slideWindow()
         double t_0 = Headers[0].stamp.toSec();
         back_R0 = Rs[0];
         back_P0 = Ps[0];
-        if (frame_count == WINDOW_SIZE)  // 依次把滑窗内信息前移
+        // 必须填满了滑窗才可以
+        if (frame_count == WINDOW_SIZE)
         {
+            // 一帧一帧交换过去
             for (int i = 0; i < WINDOW_SIZE; i++)
             {
                 Rs[i].swap(Rs[i + 1]);
@@ -1191,24 +1198,24 @@ void Estimator::slideWindow()
                 Bas[i].swap(Bas[i + 1]);
                 Bgs[i].swap(Bgs[i + 1]);
             }
-            // 滑动窗口中最新帧的时间戳、位姿和bias，用滑动窗口中第2最新帧的数据来初始化
-            // 把滑窗末尾(10帧)信息给最新一帧(11帧)把滑窗末尾(10帧)信息给最新一帧(11帧)
+            // 最后一帧的状态量赋上当前值
             Headers[WINDOW_SIZE] = Headers[WINDOW_SIZE - 1];
             Ps[WINDOW_SIZE] = Ps[WINDOW_SIZE - 1];
             Vs[WINDOW_SIZE] = Vs[WINDOW_SIZE - 1];
             Rs[WINDOW_SIZE] = Rs[WINDOW_SIZE - 1];
             Bas[WINDOW_SIZE] = Bas[WINDOW_SIZE - 1];
             Bgs[WINDOW_SIZE] = Bgs[WINDOW_SIZE - 1];
-
+            // 预积分量置零
             delete pre_integrations[WINDOW_SIZE];
             pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE]};  // 新实例化一个IMU预积分对象给下一个最新一帧
-
-            dt_buf[WINDOW_SIZE].clear();  // 清空第11帧的buf
+            // buffer清空，等待新的数据来填
+            dt_buf[WINDOW_SIZE].clear();
             linear_acceleration_buf[WINDOW_SIZE].clear();
             angular_velocity_buf[WINDOW_SIZE].clear();
-
-            if (true || solver_flag == INITIAL)  // 删除最老帧对应的全部信息
+            // 清空all_image_frame最老帧之前的的状态
+            if (true || solver_flag == INITIAL)
             {
+                // 预积分量是堆上的空间，需要手动释放
                 map<double, ImageFrame>::iterator it_0;
                 it_0 = all_image_frame.find(t_0);
                 delete it_0->second.pre_integration;
@@ -1220,7 +1227,7 @@ void Estimator::slideWindow()
                         delete it->second.pre_integration;
                     it->second.pre_integration = NULL;
                 }
-
+                // 释放完空间之后再erase
                 all_image_frame.erase(all_image_frame.begin(), it_0);
                 all_image_frame.erase(t_0);
 
@@ -1232,6 +1239,7 @@ void Estimator::slideWindow()
     {
         if (frame_count == WINDOW_SIZE)
         {
+            // 将最后两个预积分观测合并成一个
             for (unsigned int i = 0; i < dt_buf[frame_count].size(); i++)
             {
                 // 取出最新一帧的信息
@@ -1269,26 +1277,31 @@ void Estimator::slideWindow()
 }
 
 // real marginalization is removed in solve_ceres()
+// 对被移除的倒数第二帧的地图点进行处理
 void Estimator::slideWindowNew()
 {
     sum_of_front++;  // 统计一共有多少次merge滑窗第10帧的情况
     f_manager.removeFront(frame_count);  // 当最新一帧(11)不是关键帧时，用于merge滑窗内最新帧(10)
 }
+
 // real marginalization is removed in solve_ceres()
+// 由于地图点是绑定在第一个看见他的位姿上的，因此需要对被移除的帧看见的地图点进行解绑，以及每个地图点的首个观测帧id减1
 void Estimator::slideWindowOld()
 {
     sum_of_back++;  // 统计一共有多少次merge滑窗第一帧的情况
 
     bool shift_depth = solver_flag == NON_LINEAR ? true : false;
-    if (shift_depth)
+    if (shift_depth)  // 如果初始化过了
     {
         Matrix3d R0, R1;
         Vector3d P0, P1;
-        R0 = back_R0 * ric[0];  // 滑窗原先的最老帧(被merge掉)的旋转(c->w)
-        R1 = Rs[0] * ric[0];  // 滑窗原先第二老的帧(现在是最老帧)的旋转(c->w)
-        P0 = back_P0 + back_R0 * tic[0];  // 滑窗原先的最老帧(被merge掉)的平移(c->w)
-        P1 = Ps[0] + Rs[0] * tic[0];  // 滑窗原先第二老的帧(现在是最老帧)的平移(c->w)
-        f_manager.removeBackShiftDepth(R0, P0, R1, P1);  // 把首次在原先最老帧出现的特征点转移到原先第二老帧的相机坐标里(仅在slideWindowOld()出现过)
+        // back_R0 back_P0是被移除的帧的位姿
+        R0 = back_R0 * ric[0];  // 被移除的相机的位姿
+        R1 = Rs[0] * ric[0];  // 当前最老的相机位姿
+        P0 = back_P0 + back_R0 * tic[0];  // 被移除前的相机的位置
+        P1 = Ps[0] + Rs[0] * tic[0];  // 当前最老的相机位置
+        // 下面要做的事情把被移除帧看见的地图点的管理权交给当前的最老帧
+        f_manager.removeBackShiftDepth(R0, P0, R1, P1);
     }
     else
         f_manager.removeBack();  // 当最新一帧是关键帧时，用于merge滑窗内最老帧

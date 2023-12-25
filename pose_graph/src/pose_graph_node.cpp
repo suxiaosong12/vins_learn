@@ -90,11 +90,11 @@ void new_sequence()
     m_buf.unlock();
 }
 
-// 图像数据回调函数，将image_msg放入image_buf，同时根据时间戳检测是否是新的图像序列
+// 原图的回调函数
 void image_callback(const sensor_msgs::ImageConstPtr &image_msg)
 {
     //ROS_INFO("image_callback!");
-    if(!LOOP_CLOSURE)
+    if(!LOOP_CLOSURE)  // 不检测回环，原图也没有意义
         return;
     m_buf.lock();
     image_buf.push(image_msg);
@@ -104,10 +104,11 @@ void image_callback(const sensor_msgs::ImageConstPtr &image_msg)
     // detect unstable camera stream
     if (last_image_time == -1)
         last_image_time = image_msg->header.stamp.toSec();
+    // 检测时间戳是否错乱以及延时是否过大
     else if (image_msg->header.stamp.toSec() - last_image_time > 1.0 || image_msg->header.stamp.toSec() < last_image_time)
     {
         ROS_WARN("image discontinue! detect a new sequence!");
-        new_sequence();
+        new_sequence();  // 如果发生了就新建一个序列（地图）
     }
     last_image_time = image_msg->header.stamp.toSec();
 }
@@ -203,7 +204,8 @@ void relo_relative_pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
 
 }
 
-// VIO回调函数，根据pose_msg中的位姿得到IMU位姿和cam位姿
+// 接受的VIO滑窗中最新的位姿，不一定是KF
+// 这里做的都是可视化相关的内容
 void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
 {
     //ROS_INFO("vio_callback!");
@@ -298,7 +300,7 @@ void extrinsic_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     m_process.unlock();
 }
 
-// 主线程
+// 回环检测主线程
 void process()
 {
     if (!LOOP_CLOSURE)
@@ -312,8 +314,10 @@ void process()
         // find out the messages with same time stamp
         // 得到具有相同时间戳的pose_msg、image_msg、point_msg
         m_buf.lock();
+        // 做一个时间戳对齐，涉及到原图，KF位姿以及KF对应的地图点
         if(!image_buf.empty() && !point_buf.empty() && !pose_buf.empty())
         {
+            // 原图时间戳比另外两个晚，只能扔掉早于第一个原图的消息
             if (image_buf.front()->header.stamp.toSec() > pose_buf.front()->header.stamp.toSec())
             {
                 pose_buf.pop();
@@ -324,18 +328,21 @@ void process()
                 point_buf.pop();
                 printf("throw point at beginning\n");
             }
+            // 上面确保了img_buf <= point_buf && img_buf <= pose_buf
+            // 下面根据pose时间找到时间戳同步的原图和地图点
             else if (image_buf.back()->header.stamp.toSec() >= pose_buf.front()->header.stamp.toSec() 
                 && point_buf.back()->header.stamp.toSec() >= pose_buf.front()->header.stamp.toSec())
             {
-                pose_msg = pose_buf.front();
+                pose_msg = pose_buf.front();  // 取出来pose
                 pose_buf.pop();
-                while (!pose_buf.empty())
+                while (!pose_buf.empty())  // 清空所有的pose，回环的帧率慢一些没关系
                     pose_buf.pop();
+                // 找到对应的pose原图
                 while (image_buf.front()->header.stamp.toSec() < pose_msg->header.stamp.toSec())
                     image_buf.pop();
                 image_msg = image_buf.front();
                 image_buf.pop();
-
+                // 找到对应的地图点
                 while (point_buf.front()->header.stamp.toSec() < pose_msg->header.stamp.toSec())
                     point_buf.pop();
                 point_msg = point_buf.front();
@@ -478,8 +485,8 @@ int main(int argc, char **argv)
     // read param
     n.getParam("visualization_shift_x", VISUALIZATION_SHIFT_X);  // VISUALIZATION_SHIFT_X为可视化界面中图像x轴y轴的偏移量
     n.getParam("visualization_shift_y", VISUALIZATION_SHIFT_Y);
-    n.getParam("skip_cnt", SKIP_CNT);  // 运行process()内循环的间隔
-    n.getParam("skip_dis", SKIP_DIS);  // SKIP_DIS为判断是否构建关键帧的距离标准
+    n.getParam("skip_cnt", SKIP_CNT);  // 跳过前SKIP_CNT帧
+    n.getParam("skip_dis", SKIP_DIS);  // 两帧距离门限
     std::string config_file;
     n.getParam("config_file", config_file);
     cv::FileStorage fsSettings(config_file, cv::FileStorage::READ);
@@ -487,12 +494,12 @@ int main(int argc, char **argv)
     {
         std::cerr << "ERROR: Wrong path to settings" << std::endl;
     }
-
-    double camera_visual_size = fsSettings["visualize_camera_size"];  // visualize_camera_size为可视化界面图像的尺寸
+    // 可视化的参数
+    double camera_visual_size = fsSettings["visualize_camera_size"];  // 为可视化界面图像的尺寸
     cameraposevisual.setScale(camera_visual_size);
     cameraposevisual.setLineWidth(camera_visual_size / 10.0);
 
-
+    // 是否进行回环检测
     LOOP_CLOSURE = fsSettings["loop_closure"];  // loop_closure=1即进行回环检测
     std::string IMAGE_TOPIC;
     int LOAD_PREVIOUS_POSE_GRAPH;
@@ -503,12 +510,12 @@ int main(int argc, char **argv)
         ROW = fsSettings["image_height"];
         COL = fsSettings["image_width"];
         std::string pkg_path = ros::package::getPath("pose_graph");
-        string vocabulary_file = pkg_path + "/../support_files/brief_k10L6.bin";
+        string vocabulary_file = pkg_path + "/../support_files/brief_k10L6.bin";  // 训练好的二进制词袋路径的路径
         cout << "vocabulary_file" << vocabulary_file << endl;
-        posegraph.loadVocabulary(vocabulary_file);
+        posegraph.loadVocabulary(vocabulary_file);  // 加载二进制词袋
 
         // 读取BRIEF描述子的模板文件
-        BRIEF_PATTERN_FILE = pkg_path + "/../support_files/brief_pattern.yml";
+        BRIEF_PATTERN_FILE = pkg_path + "/../support_files/brief_pattern.yml";  // 计算描述子pattern的文件
         cout << "BRIEF_PATTERN_FILE" << BRIEF_PATTERN_FILE << endl;
         m_camera = camodocal::CameraFactory::instance()->generateCameraFromYamlFile(config_file.c_str());
 
@@ -521,9 +528,9 @@ int main(int argc, char **argv)
         FileSystemHelper::createDirectoryIfNotExists(POSE_GRAPH_SAVE_PATH.c_str());
         FileSystemHelper::createDirectoryIfNotExists(VINS_RESULT_PATH.c_str());
 
-        VISUALIZE_IMU_FORWARD = fsSettings["visualize_imu_forward"];
-        LOAD_PREVIOUS_POSE_GRAPH = fsSettings["load_previous_pose_graph"];
-        FAST_RELOCALIZATION = fsSettings["fast_relocalization"];
+        VISUALIZE_IMU_FORWARD = fsSettings["visualize_imu_forward"];  // 可视化是否使用imu进行前推
+        LOAD_PREVIOUS_POSE_GRAPH = fsSettings["load_previous_pose_graph"];  // 是否加载已有地图
+        FAST_RELOCALIZATION = fsSettings["fast_relocalization"];  // 是否快速重定位，这个和VIO节点有交互
         // VINS_RESULT_PATH = VINS_RESULT_PATH + "/vins_result_loop.csv";
         VINS_RESULT_PATH = VINS_RESULT_PATH + "/vins_result_loop.txt";
 

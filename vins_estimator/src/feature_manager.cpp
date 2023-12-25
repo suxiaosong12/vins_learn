@@ -190,6 +190,7 @@ void FeatureManager::setDepth(const VectorXd &x)
     }
 }
 
+// 移除一些不能被三角化的点
 void FeatureManager::removeFailures()
 {
     for (auto it = feature.begin(), it_next = feature.begin();
@@ -321,34 +322,41 @@ void FeatureManager::removeOutlier()
     }
 }
 
+/*
+把被移除帧看见的地图点的管理权交给当前的最老帧
+marg_R、marg_P:被移除的位姿
+new_R、new_P：转移地图点的位姿
+*/
 void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3d marg_P, Eigen::Matrix3d new_R, Eigen::Vector3d new_P)
 {
     for (auto it = feature.begin(), it_next = feature.begin();
          it != feature.end(); it = it_next)
     {
         it_next++;
-
+        // 如果不是被移除帧看到的，那么该地图点对应的起始帧id减1
         if (it->start_frame != 0)
             it->start_frame--;
         else
         {
-            Eigen::Vector3d uv_i = it->feature_per_frame[0].point;  
-            it->feature_per_frame.erase(it->feature_per_frame.begin());
+            Eigen::Vector3d uv_i = it->feature_per_frame[0].point;  // 取出归一化相机坐标坐标系
+            it->feature_per_frame.erase(it->feature_per_frame.begin());  // 该点不再被原来的第一帧看到，因此从中移除
+            // 如果这个地图点只被一帧看到，就没有存在的价值了
             if (it->feature_per_frame.size() < 2)
             {
                 feature.erase(it);
                 continue;
             }
-            else
+            else  // 进行管辖权交接
             {
-                Eigen::Vector3d pts_i = uv_i * it->estimated_depth;
-                Eigen::Vector3d w_pts_i = marg_R * pts_i + marg_P;
-                Eigen::Vector3d pts_j = new_R.transpose() * (w_pts_i - new_P);
+                Eigen::Vector3d pts_i = uv_i * it->estimated_depth;  // 实际相机坐标系下的坐标
+                Eigen::Vector3d w_pts_i = marg_R * pts_i + marg_P;  // 转到世界坐标系下
+                Eigen::Vector3d pts_j = new_R.transpose() * (w_pts_i - new_P);  // 转到新的最老帧的相机坐标系下
                 double dep_j = pts_j(2);
+                // 看看深度是否有效
                 if (dep_j > 0)
-                    it->estimated_depth = dep_j;
+                    it->estimated_depth = dep_j;  // 有效的话就得到现在最老帧下的深度值
                 else
-                    it->estimated_depth = INIT_DEPTH;
+                    it->estimated_depth = INIT_DEPTH;  // 无效就设置默认值
             }
         }
         // remove tracking-lost feature after marginalize
@@ -361,6 +369,7 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3
     }
 }
 
+// 这个还没有初始化结束，因此相比刚才，不进行地图点新的深度的换算，因为此时还要进行视觉惯性对齐
 void FeatureManager::removeBack()
 {
     for (auto it = feature.begin(), it_next = feature.begin();
@@ -379,23 +388,24 @@ void FeatureManager::removeBack()
     }
 }
 
+// 对margin倒数第二帧进行处理
 void FeatureManager::removeFront(int frame_count)
 {
     for (auto it = feature.begin(), it_next = feature.begin(); it != feature.end(); it = it_next)
     {
         it_next++;
 
-        if (it->start_frame == frame_count)
+        if (it->start_frame == frame_count)  // 如果地图点被最后一帧看到，由于滑窗，它的起始帧减1
         {
             it->start_frame--;
         }
         else
         {
-            int j = WINDOW_SIZE - 1 - it->start_frame;
-            if (it->endFrame() < frame_count - 1)
+            int j = WINDOW_SIZE - 1 - it->start_frame;  // 如果这个地图点能够被倒数第二帧看到，那么倒数第二帧在这个地图点对应滑窗的索引
+            if (it->endFrame() < frame_count - 1)  // 如果该地图点不能被倒数第二帧看到，那没什么好做的
                 continue;
-            it->feature_per_frame.erase(it->feature_per_frame.begin() + j);
-            if (it->feature_per_frame.size() == 0)
+            it->feature_per_frame.erase(it->feature_per_frame.begin() + j);  // 被倒数第二帧看到，erase这个索引
+            if (it->feature_per_frame.size() == 0)  // 如果这个地图点没有别的观测了，就没有存在的价值了
                 feature.erase(it);
         }
     }

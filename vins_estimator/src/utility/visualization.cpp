@@ -391,10 +391,11 @@ void pubKeyframe(const Estimator &estimator)
                 p.x = w_pts_i(0);
                 p.y = w_pts_i(1);
                 p.z = w_pts_i(2);
-                point_cloud.points.push_back(p);
+                point_cloud.points.push_back(p);  // 世界坐标系的坐标
 
                 int imu_j = WINDOW_SIZE - 2 - it_per_id.start_frame;
                 sensor_msgs::ChannelFloat32 p_2d;
+                // 在该帧相机坐标系下的归一化坐标以及像素坐标
                 p_2d.values.push_back(it_per_id.feature_per_frame[imu_j].point.x());
                 p_2d.values.push_back(it_per_id.feature_per_frame[imu_j].point.y());
                 p_2d.values.push_back(it_per_id.feature_per_frame[imu_j].uv.x());

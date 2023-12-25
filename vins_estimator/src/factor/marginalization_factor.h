@@ -22,11 +22,14 @@ struct ResidualBlockInfo
 
     ceres::CostFunction *cost_function;
     ceres::LossFunction *loss_function;
+    // 优化变量数据
     std::vector<double *> parameter_blocks;
+    // 待marg的优化变量id
     std::vector<int> drop_set;
 
     double **raw_jacobians;
     std::vector<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> jacobians;
+    // 残差，IMU:15x1，视觉：2x1
     Eigen::VectorXd residuals;
 
     int localSize(int size)
