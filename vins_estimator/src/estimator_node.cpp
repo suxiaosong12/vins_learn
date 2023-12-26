@@ -341,7 +341,7 @@ void process()
                 relo_msg = relo_buf.front();
                 relo_buf.pop();
             }
-            if (relo_msg != NULL)
+            if (relo_msg != NULL)  // 有效回环信息
             {
                 vector<Vector3d> match_points;
                 double frame_stamp = relo_msg->header.stamp.toSec(); // 回环帧的时间戳
@@ -353,6 +353,7 @@ void process()
                     u_v_id.z() = relo_msg->points[i].z;
                     match_points.push_back(u_v_id);
                 }
+                // 回环帧的位姿
                 Vector3d relo_t(relo_msg->channels[0].values[0], relo_msg->channels[0].values[1], relo_msg->channels[0].values[2]);
                 Quaterniond relo_q(relo_msg->channels[0].values[3], relo_msg->channels[0].values[4], relo_msg->channels[0].values[5], relo_msg->channels[0].values[6]);
                 Matrix3d relo_r = relo_q.toRotationMatrix();

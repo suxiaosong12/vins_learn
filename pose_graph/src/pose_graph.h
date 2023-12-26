@@ -228,7 +228,7 @@ struct FourDOFWeightError
 		residuals[0] = (t_i_ij[0] - T(t_x)) * T(weight);
 		residuals[1] = (t_i_ij[1] - T(t_y)) * T(weight);
 		residuals[2] = (t_i_ij[2] - T(t_z)) * T(weight);
-		residuals[3] = NormalizeAngle((yaw_j[0] - yaw_i[0] - T(relative_yaw))) * T(weight) / T(10.0);
+		residuals[3] = NormalizeAngle((yaw_j[0] - yaw_i[0] - T(relative_yaw))) * T(weight) / T(10.0);  // 区别在这里
 
 		return true;
 	}

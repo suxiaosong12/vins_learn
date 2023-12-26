@@ -927,12 +927,12 @@ void Estimator::optimization()
             //当前这个特征点至少要在重定位帧被观测到
             if(start <= relo_frame_local_index)
             {   
-                //如果都扫描到滑窗里第i个特征了，回环帧上还有id序号比i小，那这些肯定在滑窗里是没有匹配点的
+                // 寻找回环帧能看到的地图点
                 while((int)match_points[retrive_feature_index].z() < it_per_id.feature_id)
                 {
                     retrive_feature_index++;
                 }
-                //如果回环帧某个特征点和滑窗内特征点匹配上了
+                //这个地图点也能被回环帧看到
                 if((int)match_points[retrive_feature_index].z() == it_per_id.feature_id)
                 {
                     //找到这个特征点在回环帧上的归一化坐标
@@ -1307,7 +1307,7 @@ void Estimator::slideWindowOld()
         f_manager.removeBack();  // 当最新一帧是关键帧时，用于merge滑窗内最老帧
 }
 
-// 关于重定位
+// 接受回环帧的信息
 void Estimator::setReloFrame(double _frame_stamp, int _frame_index, vector<Vector3d> &_match_points, Vector3d _relo_t, Matrix3d _relo_r)
 {
     relo_frame_stamp = _frame_stamp; //pose_graph里要被重定位的关键帧的时间戳
@@ -1316,6 +1316,7 @@ void Estimator::setReloFrame(double _frame_stamp, int _frame_index, vector<Vecto
     match_points = _match_points;    //两帧共同的特征点在回环帧上的归一化坐标
     prev_relo_t = _relo_t;           //回环帧在自己世界坐标系的位姿(准)
     prev_relo_r = _relo_r;           //回环帧在自己世界坐标系的位姿(准)
+    // 在滑窗中寻找当前帧，因为VIO送给回环节点的是倒数第三帧，因此，很有可能这个当前帧还在滑窗里
     for(int i = 0; i < WINDOW_SIZE; i++) 
     {
         if(relo_frame_stamp == Headers[i].stamp.toSec())//如果pose_graph里要被重定位的关键帧还在滑窗里
@@ -1323,7 +1324,7 @@ void Estimator::setReloFrame(double _frame_stamp, int _frame_index, vector<Vecto
             relo_frame_local_index = i; //找到它的id
             relocalization_info = 1;    //告诉后端要重定位
             for (int j = 0; j < SIZE_POSE; j++)
-                relo_Pose[j] = para_Pose[i][j]; //用这个关键帧的位姿(当前滑窗的世界坐标系下，不准)初始化回环帧的位姿
+                relo_Pose[j] = para_Pose[i][j]; //借助VIO优化回环帧位姿，初值先设置为当前帧位姿
         }
     }
 }

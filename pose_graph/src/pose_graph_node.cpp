@@ -66,6 +66,7 @@ CameraPoseVisualization cameraposevisual(1, 0, 0, 1);
 Eigen::Vector3d last_t(-100, -100, -100);
 double last_image_time = -1;
 
+// 新建一个sequence
 void new_sequence()
 {
     printf("new sequence\n");
@@ -182,7 +183,7 @@ void imu_forward_callback(const nav_msgs::Odometry::ConstPtr &forward_msg)
         cameraposevisual.publish_by(pub_camera_pose_visual, forward_msg->header);
     }
 }
-//重定位回调函数，将重定位帧的相对位姿放入loop_info，updateKeyFrameLoop()进行回环更新
+//利用VIO进行重定位的结果进行修正
 void relo_relative_pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
 {
     Vector3d relative_t = Vector3d(pose_msg->pose.pose.position.x,
@@ -366,7 +367,7 @@ void process()
                 continue;
             }
 
-            if (skip_cnt < SKIP_CNT)
+            if (skip_cnt < SKIP_CNT)  // 降频，每隔SKIP_CNT帧处理一次
             {
                 skip_cnt++;
                 continue;
@@ -377,8 +378,6 @@ void process()
             }
 
             // 将 ROS 的 sensor_msgs/Image 消息转换成 OpenCV 的 CvImageConstPtr 对象，并且将图像的编码格式转换成 "mono8"
-            // ptr 变量就是一个指向 CvImageConstPtr 对象的智能指针，它可以用于在 ROS 和 OpenCV 之间传递图像数据
-            // 由于 CvImageConstPtr 对象是一个常量指针，因此不能用于修改图像数据。如果需要修改图像数据，则需要使用 CvImagePtr 对象
             cv_bridge::CvImageConstPtr ptr;
             if (image_msg->encoding == "8UC1")  // "8UC1"，单通道灰度图像
             {
@@ -397,6 +396,7 @@ void process()
             
             cv::Mat image = ptr->image;
             // build keyframe
+            // 得到KF的位姿，转成eigen格式
             Vector3d T = Vector3d(pose_msg->pose.pose.position.x,
                                   pose_msg->pose.pose.position.y,
                                   pose_msg->pose.pose.position.z);
@@ -407,18 +407,18 @@ void process()
             // 将距上一关键帧距离（平移向量的模）超过SKIP_DIS的图像创建为关键帧
             if((T - last_t).norm() > SKIP_DIS)
             {
-                vector<cv::Point3f> point_3d; 
-                vector<cv::Point2f> point_2d_uv; 
-                vector<cv::Point2f> point_2d_normal;
-                vector<double> point_id;
-
+                vector<cv::Point3f> point_3d; // VIO世界系坐标下的地图点
+                vector<cv::Point2f> point_2d_uv;   // 归一化相机坐标系的坐标
+                vector<cv::Point2f> point_2d_normal;  // 像素坐标
+                vector<double> point_id;  // 地图点的idx
+                // 遍历所有地图点
                 for (unsigned int i = 0; i < point_msg->points.size(); i++)
                 {
                     cv::Point3f p_3d;
                     p_3d.x = point_msg->points[i].x;
                     p_3d.y = point_msg->points[i].y;
                     p_3d.z = point_msg->points[i].z;
-                    point_3d.push_back(p_3d);
+                    point_3d.push_back(p_3d);  // 转成eigen格式
 
                     cv::Point2f p_2d_uv, p_2d_normal;
                     double p_id;
@@ -433,12 +433,12 @@ void process()
 
                     //printf("u %f, v %f \n", p_2d_uv.x, p_2d_uv.y);
                 }
-
+                // 建立回环检测节点的KF
                 KeyFrame* keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image,
                                    point_3d, point_2d_uv, point_2d_normal, point_id, sequence);   
                 m_process.lock();
                 start_flag = 1;
-                posegraph.addKeyFrame(keyframe, 1);
+                posegraph.addKeyFrame(keyframe, 1);  // 回环检测核心入口函数
                 m_process.unlock();
                 frame_index++;
                 last_t = T;
