@@ -221,7 +221,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)  // 接收图像
     }
     
     if(PUB_THIS_FRAME){
-        ofstream foutC("/home/sxs/result_output/time/euroc/VINS_MONO/eplfvins_point_detect_tracker.csv", ios::app);
+        ofstream foutC("/home/sxs/result_output/time/euroc/VINS_MONO/vins_point_detect_tracker.csv", ios::app);
         foutC << t_r.toc() << endl;
         foutC.close();
     }
