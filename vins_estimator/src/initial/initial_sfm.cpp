@@ -34,7 +34,7 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 		if (sfm_f[j].state != true) // 如果该特征点未被三角化，则跳过该特征点
 			continue;
 		Vector2d point2d;
-		// 找出代求帧上所有特征点的归一化坐标和3D坐标（l系上）
+		// 找出待求帧上所有特征点的归一化坐标和3D坐标（l系上）
 		for (int k = 0; k < (int)sfm_f[j].observation.size(); k++) // 遍历观测到该特征点的图像帧
 		{
 			if (sfm_f[j].observation[k].first == i) // 从observation中找到待解算位姿的帧i
@@ -154,7 +154,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 
 	// 这里把第l帧看作参考坐标系，根据当前帧相对于第l帧的relative_R，relative_T，
 	// 得到当前帧在参考坐标系下的位姿，之后的pose[i]表示第l帧相对于第i帧的变换矩阵[R|T]
-	q[frame_num - 1] = q[l] * Quaterniond(relative_R); // relative_R表示最新帧相对于l帧的旋转矩阵Rln,(Xl = Rln * Xn)
+	q[frame_num - 1] = q[l] * Quaterniond(relative_R); // relative_R表示最新帧相对于l帧的旋转矩阵Rln
 	T[frame_num - 1] = relative_T;
 	//cout << "init q_l " << q[l].w() << " " << q[l].vec().transpose() << endl;
 	//cout << "init t_l " << T[l].transpose() << endl;
@@ -187,8 +187,6 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	//1: trangulate between l ----- frame_num - 1
 	//2: solve pnp l + 1; trangulate l + 1 ------- frame_num - 1; 
 
-	//以frame_num - 1为参考帧，根据第l和frame_num - 1帧的R,T，三角化一些点，然后再用PNP得到l+1到frame-1之间所有相对pose，然后恢复这些3D点
-	
 	/** 
 	 * 根据第l和frame_num - 1帧的R,T，三角化一些点
 	 * 从第l帧到第（frame_num - 2）帧：

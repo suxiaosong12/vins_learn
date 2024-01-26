@@ -319,7 +319,7 @@ bool Estimator::initialStructure()
     } 
 
 
-    Matrix3d relative_R; // 从最新帧到选定帧(第l帧)的旋转 R_l = relative_R * R_最新帧
+    Matrix3d relative_R; // Rn_l 从最新帧到选定帧(第l帧)的旋转 R_最新 = relative_R * R_l
     Vector3d relative_T; // 从最新帧到选定帧(第l帧)的位移
     int l; // 选定帧在滑动窗口中的帧号
 
