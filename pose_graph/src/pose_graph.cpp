@@ -180,12 +180,11 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)  // 添加�
 
     if (SAVE_LOOP_PATH)
     {
-        ofstream loop_path_file(VINS_RESULT_PATH, ios::app);
-        loop_path_file.setf(ios::fixed, ios::floatfield);
-        loop_path_file.precision(0);
+        // ofstream loop_path_file(VINS_RESULT_PATH, ios::app);
+        // loop_path_file.setf(ios::fixed, ios::floatfield);
+        // loop_path_file.precision(0);
         // loop_path_file << cur_kf->time_stamp * 1e9 << ",";
-        loop_path_file << cur_kf->time_stamp << " ";
-        loop_path_file.precision(5);
+        // loop_path_file.precision(5);
         // loop_path_file  << P.x() << ","
         //       << P.y() << ","
         //       << P.z() << ","
@@ -194,15 +193,23 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)  // 添加�
         //       << Q.y() << ","
         //       << Q.z() << ","
         //       << endl;
-        loop_path_file  << P.x() << " "
-                        << P.y() << " "
-                        << P.z() << " "
-                        << Q.x() << " "
-                        << Q.y() << " "
-                        << Q.z() << " "
-                        << Q.w() << endl;
+        // loop_path_file.close();
+        ofstream foutC(VINS_RESULT_PATH, ios::app);
+        foutC.setf(ios::fixed, ios::floatfield);
+        foutC.precision(9);
+        foutC << cur_kf->time_stamp << " ";
+        foutC.precision(5);
+        foutC << P.x() << " "
+              << P.y() << " "
+              << P.z() << " "
+              << Q.x() << " "
+              << Q.y() << " "
+              << Q.z() << " "
+              << Q.w()
+              << endl;
+        foutC.close();
 
-        loop_path_file.close();
+        // foutC1.close();
     }
     //draw local connection
     if (SHOW_S_EDGE)
@@ -694,12 +701,11 @@ void PoseGraph::updatePath()  // 更新轨迹并发布
 
         if (SAVE_LOOP_PATH)
         {
-            ofstream loop_path_file(VINS_RESULT_PATH, ios::app);
-            loop_path_file.setf(ios::fixed, ios::floatfield);
-            loop_path_file.precision(0);
+            // ofstream loop_path_file(VINS_RESULT_PATH, ios::app);
+            // loop_path_file.setf(ios::fixed, ios::floatfield);
+            // loop_path_file.precision(0);
             // loop_path_file << (*it)->time_stamp * 1e9 << ",";
-            loop_path_file << (*it)->time_stamp << " ";
-            loop_path_file.precision(5);
+            // loop_path_file.precision(5);
             // loop_path_file  << P.x() << ","
             //       << P.y() << ","
             //       << P.z() << ","
@@ -708,15 +714,23 @@ void PoseGraph::updatePath()  // 更新轨迹并发布
             //       << Q.y() << ","
             //       << Q.z() << ","
             //       << endl;
-            loop_path_file  << P.x() << " "
-                            << P.y() << " "
-                            << P.z() << " "
-                            << Q.x() << " "
-                            << Q.y() << " "
-                            << Q.z() << " "
-                            << Q.w() << endl;
+            // loop_path_file.close();
+            ofstream foutC(VINS_RESULT_PATH, ios::app);
+            foutC.setf(ios::fixed, ios::floatfield);
+            foutC.precision(9);
+            foutC << (*it)->time_stamp << " ";
+            foutC.precision(5);
+            foutC << P.x() << " "
+                  << P.y() << " "
+                  << P.z() << " "
+                  << Q.x() << " "
+                  << Q.y() << " "
+                  << Q.z() << " "
+                  << Q.w() << ""
+                  << endl;
+            foutC.close();
 
-            loop_path_file.close();
+            // foutC1.close();
         }
         //draw local connection
         if (SHOW_S_EDGE)
